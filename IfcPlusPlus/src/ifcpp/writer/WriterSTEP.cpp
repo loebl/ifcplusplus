@@ -44,18 +44,22 @@ void WriterSTEP::writeModelToStream( std::stringstream& stream, shared_ptr<Build
 	stream.imbue(std::locale("C"));
 
 	const std::wstring& file_header_wstr = model->getFileHeader();
-	std::string file_header_str = ws2s( file_header_wstr );
-	stream << file_header_str.c_str();
+	//encode header line by line, to avoid encoding new-line characters
+	for (auto first = std::cbegin(file_header_wstr), end = std::cend(file_header_wstr),
+		last = std::find(first, end, L'\n');
+		end != last; first = last, last = std::find(last, end, L'\n'))
+	{
+		stream << encodeStepString({first, last++}) << "\n";
+	}
 	stream << "DATA;\n";
 	stream << std::setprecision( 15 );
 	stream << std::setiosflags( std::ios::showpoint );
 	stream << std::fixed;
 	const std::map<int,shared_ptr<BuildingEntity> >& map = model->getMapIfcEntities();
-	std::map<int, shared_ptr<BuildingEntity> > map_ordered( map.begin(), map.end() );
 	size_t i = 0;
 	double last_progress = 0.0;
-	double num_objects = double(map_ordered.size());
-	for( auto it=map_ordered.begin(); it!=map_ordered.end(); ++it )
+	double num_objects = double(map.size());
+	for( auto it=map.begin(); it!=map.end(); ++it )
 	{
 		shared_ptr<BuildingEntity> obj = it->second;
 
