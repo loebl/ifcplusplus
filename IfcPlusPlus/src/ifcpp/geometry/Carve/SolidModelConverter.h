@@ -1301,6 +1301,8 @@ public:
 		// check dimensions of other operand
 		double extrusion_depth = HALF_SPACE_BOX_SIZE*m_point_converter->getUnitConverter()->getCustomLengthFactor();
 		//vec3 other_operand_pos = base_surface_position;
+		//If we know the size of the other operand we can limit the size of
+		//the created mesh for clipping
 		if( other_operand )
 		{
 			carve::geom::aabb<3> aabb;
@@ -1389,7 +1391,8 @@ public:
 
 			const size_t num_poly_boundary_points = num_poly_points / 2;
 
-			// project to base surface
+			//project to base surface.
+			//This step moves the half space into the specified plane (attribute 1)
 			for( size_t i_base_point = 0; i_base_point < polygonal_halfspace_meshset->vertex_storage.size(); ++i_base_point )
 			{
 				carve::mesh::Vertex<3>& poly_vert = polygonal_halfspace_meshset->vertex_storage[i_base_point];
@@ -1430,6 +1433,7 @@ public:
 				}
 			}
 
+			//the mesh vertices were modified, a recalculation is necessary
 			for( size_t i_mesh = 0; i_mesh < polygonal_halfspace_meshset->meshes.size(); ++i_mesh )
 			{
 				polygonal_halfspace_meshset->meshes[i_mesh]->recalc();
