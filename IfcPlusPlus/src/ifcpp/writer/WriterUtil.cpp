@@ -21,76 +21,55 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OU
 #include <sstream>
 #include <vector>
 #include <map>
+#include <iomanip>
 #include "ifcpp/model/GlobalDefines.h"
 #include "ifcpp/model/BuildingObject.h"
 #include "WriterUtil.h"
 
 std::string encodeStepString( const std::wstring& str )
 {
-	wchar_t* stream_pos = (wchar_t*)str.c_str();
-	std::string result_str;
-	std::string beginUnicodeTag = "\\X2\\";
-	std::string endUnicodeTag = "\\X0\\";
-	bool hasOpenedUnicodeTag = false;
+	std::stringstream result;
+	constexpr auto beginUnicodeTag = "\\X2\\";
+	constexpr auto endUnicodeTag = "\\X0\\";
+	auto hasOpenedUnicodeTag = false;
 
-	while( *stream_pos != '\0' )
+	result << std::hex << std::setfill('0') << std::uppercase;
+	for (auto const append_char : str)
 	{
-		wchar_t append_char = *stream_pos;
-		if( append_char == 10 )
+		//chars 32 to 126 (inclusive) may appear as raw characters
+		//everything else has to be encoded
+		if (32 > append_char)
 		{
-			// encode new line
-			result_str.append( "\\X\\0A" );
+			if( hasOpenedUnicodeTag )
+				result << std::setw(4) << int{append_char};
+			//use short encoding form, instead of long when not between unicode tag
+			result << "\\X\\" << std::setw(2) << int{append_char};
 		}
-		else if( append_char == 13 )
-		{
-			// encode carriage return
-			result_str.append( "\\X\\0D" );
-		}
-		else if( append_char == 92 )
-		{
-			// encode backslash
-			result_str.append( "\\\\" );
-		}
-		else if( append_char > 0 && append_char < 128 )
+		else if( 127 > append_char )
 		{
 			if( hasOpenedUnicodeTag )
 			{
-				result_str += endUnicodeTag;
+				result << endUnicodeTag;
 				hasOpenedUnicodeTag = false;
 			}
-
-			result_str.push_back( (char)append_char );
+			result << static_cast<char>(append_char);
 		}
 		else
 		{
-			int value = (int)(append_char);
-			wchar_t temporary[8];
-			swprintf( temporary, 5, L"%04X", value );
-
 			if( !hasOpenedUnicodeTag )
 			{
-				result_str += beginUnicodeTag;
+				result << beginUnicodeTag;
 				hasOpenedUnicodeTag = true;
 			}
-
-			char mb[8];
-			wctomb( mb, temporary[0] );
-			result_str.push_back( mb[0] );
-			wctomb( mb, temporary[1] );
-			result_str.push_back( mb[0] );
-			wctomb( mb, temporary[2] );
-			result_str.push_back( mb[0] );
-			wctomb( mb, temporary[3] );
-			result_str.push_back( mb[0] );
+			result << std::setw(4) << int{append_char};
 		}
-		++stream_pos;
 	}
 
 	if( hasOpenedUnicodeTag )
 	{
-		result_str += endUnicodeTag;
+		result << endUnicodeTag;
 		hasOpenedUnicodeTag = false;
 	}
 
-	return result_str;
+	return result.str();
 }
