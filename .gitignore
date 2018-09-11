@@ -5,4 +5,8 @@ bin32
 *.sdf
 SimpleViewerExample/dump_mesh_debug.txt
 *.opensdf
+*.opendb
+*.VC.db
+.vs
 /build/
+
