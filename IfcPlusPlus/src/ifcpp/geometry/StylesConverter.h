@@ -167,29 +167,28 @@ public:
 		}
 	}
 
-
-	void convertIfcSurfaceStyle( shared_ptr<IfcSurfaceStyle> surface_style, shared_ptr<AppearanceData>& appearance_data )
+	
+	void convertIfcSurfaceStyle(
+		shared_ptr<IfcSurfaceStyle> const& surface_style,
+		shared_ptr<AppearanceData>& appearance_data )
 	{
 		if( !surface_style )
-		{
 			return;
-		}
-		const int style_id = surface_style->m_entity_id;
+
+		auto const style_id = surface_style->m_entity_id;
 		auto it_find_existing_style = m_map_ifc_styles.find( style_id );
 		if( it_find_existing_style != m_map_ifc_styles.end() )
 		{
 			// todo: check if appearance compare is faster here
 			appearance_data = it_find_existing_style->second;
 			if( appearance_data->m_complete )
-			{
 				return;
-			}
 		}
 		else
 		{
 			if( !appearance_data )
 			{
-				appearance_data = shared_ptr<AppearanceData>( new AppearanceData( style_id ) );
+				appearance_data = std::make_shared<AppearanceData>(style_id);
 			}
 
 #ifdef ENABLE_OPENMP
@@ -199,27 +198,23 @@ public:
 		}
 		appearance_data->m_apply_to_geometry_type = AppearanceData::GEOM_TYPE_SURFACE;
 
-		std::vector<shared_ptr<IfcSurfaceStyleElementSelect> >& vec_styles = surface_style->m_Styles;
+		auto const& vec_styles = surface_style->m_Styles;
 		if( vec_styles.size() == 0 )
-		{
 			return;
-		}
 
-		for( size_t ii_styles = 0; ii_styles < vec_styles.size(); ++ii_styles )
+		for( auto const& surf_style_element_select : vec_styles )
 		{
-			shared_ptr<IfcSurfaceStyleElementSelect> surf_style_element_select = vec_styles[ii_styles];
 			if( !surf_style_element_select )
-			{
 				continue;
-			}
+
 			// TYPE IfcSurfaceStyleElementSelect = SELECT	(IfcExternallyDefinedSurfaceStyle	,IfcSurfaceStyleLighting	,IfcSurfaceStyleRefraction	,IfcSurfaceStyleShading	,IfcSurfaceStyleWithTextures);
-			shared_ptr<IfcSurfaceStyleShading> surface_style_shading = dynamic_pointer_cast<IfcSurfaceStyleShading>( surf_style_element_select );
+			auto const surface_style_shading = dynamic_pointer_cast<IfcSurfaceStyleShading>( surf_style_element_select );
 			if( surface_style_shading )
 			{
 				vec4 surface_color( 0.8, 0.82, 0.84, 1.0 );
 				if( surface_style_shading->m_SurfaceColour )
 				{
-					shared_ptr<IfcColourRgb> surf_color = surface_style_shading->m_SurfaceColour;
+					auto const& surf_color = surface_style_shading->m_SurfaceColour;
 					convertIfcColourRgb( surf_color, surface_color );
 				}
 
@@ -231,49 +226,44 @@ public:
 				vec4 ambient_color( surface_color );
 				vec4 diffuse_color( surface_color );
 				vec4 specular_color( surface_color );
-				double shininess = 35.f;
-				double transparency = surface_color.a();
-				bool set_transparent = false;
+				auto shininess = 35.;
+				auto transparency = surface_color.a();
+				auto set_transparent = false;
 
-				shared_ptr<IfcSurfaceStyleRendering> surf_style_rendering = dynamic_pointer_cast<IfcSurfaceStyleRendering>( surf_style_element_select );
+				if (surface_style_shading->m_Transparency)
+				{
+					// in IFC 1 is transparent, 0 is opaque. if not given, the value 0 (opaque) is assumed
+					// in osg, 1 is opaque, 0 is transparent
+					transparency = 1. - surface_style_shading->m_Transparency->m_value;
+					if (transparency < 0.1)
+						transparency = 0.1;
+
+					if (transparency > 1.)
+						transparency = 1.;
+
+					if (transparency < 0.99)
+						set_transparent = true;
+				}
+
+				auto const surf_style_rendering = dynamic_pointer_cast<IfcSurfaceStyleRendering>( surf_style_element_select );
 				if( surf_style_rendering )
 				{
 					if( surf_style_rendering->m_DiffuseColour )
 					{
-						shared_ptr<IfcColourOrFactor> color_or_factor = surf_style_rendering->m_DiffuseColour;
+						auto const& color_or_factor = surf_style_rendering->m_DiffuseColour;
 						convertIfcColourOrFactor( color_or_factor, surface_color, diffuse_color );
 					}
 
 					if( surf_style_rendering->m_SpecularColour )
 					{
-						shared_ptr<IfcColourOrFactor> ifc_specular_color = surf_style_rendering->m_SpecularColour;
+						auto const& ifc_specular_color = surf_style_rendering->m_SpecularColour;
 						convertIfcColourOrFactor( ifc_specular_color, surface_color, specular_color );
 					}
 
-					if( surf_style_rendering->m_Transparency )
-					{
-						// in IFC 1 is transparent, 0 is opaque. if not given, the value 0 (opaque) is assumed
-						// in osg, 1 is opaque, 0 is transparent
-						transparency = 1.f - (float)surf_style_rendering->m_Transparency->m_value;
-						if( transparency < 0.1f )
-						{
-							transparency = 0.1f;
-						}
-
-						if( transparency > 1.f )
-						{
-							transparency = 1.f;
-						}
-
-						if( transparency < 0.99f )
-						{
-							set_transparent = true;
-						}
-					}
 
 					if( surf_style_rendering->m_SpecularHighlight )
 					{
-						shared_ptr<IfcSpecularHighlightSelect> spec_highlight = surf_style_rendering->m_SpecularHighlight;
+						auto const& spec_highlight = surf_style_rendering->m_SpecularHighlight;
 						convertIfcSpecularHighlightSelect( spec_highlight, appearance_data );
 						shininess = appearance_data->m_specular_roughness * 128;
 						if( shininess <= 1.0 )
@@ -283,9 +273,21 @@ public:
 					}
 				}
 
-				appearance_data->m_color_ambient.setColor( ambient_color.r()*0.8, ambient_color.g()*0.8, ambient_color.b()*0.8, transparency );
-				appearance_data->m_color_diffuse.setColor( diffuse_color.r(), diffuse_color.g(), diffuse_color.b(), transparency );
-				appearance_data->m_color_specular.setColor( specular_color.r()*0.1, specular_color.g()*0.1, specular_color.b()*0.1, transparency );
+				appearance_data->m_color_ambient.setColor(
+					ambient_color.r()*0.8,
+					ambient_color.g()*0.8,
+					ambient_color.b()*0.8,
+					transparency );
+				appearance_data->m_color_diffuse.setColor(
+					diffuse_color.r(),
+					diffuse_color.g(),
+					diffuse_color.b(),
+					transparency );
+				appearance_data->m_color_specular.setColor(
+					specular_color.r()*0.1,
+					specular_color.g()*0.1,
+					specular_color.b()*0.1,
+					transparency );
 
 				appearance_data->m_shininess = shininess;
 				appearance_data->m_set_transparent = set_transparent;
@@ -294,7 +296,7 @@ public:
 				continue;
 			}
 
-			shared_ptr<IfcExternallyDefinedSurfaceStyle> ext_surf_style = dynamic_pointer_cast<IfcExternallyDefinedSurfaceStyle>( surf_style_element_select );
+			auto const ext_surf_style = dynamic_pointer_cast<IfcExternallyDefinedSurfaceStyle>( surf_style_element_select );
 			if( ext_surf_style )
 			{
 #ifdef _DEBUG
@@ -303,7 +305,7 @@ public:
 				continue;
 			}
 
-			shared_ptr<IfcSurfaceStyleLighting> style_lighting = dynamic_pointer_cast<IfcSurfaceStyleLighting>( surf_style_element_select );
+			auto const style_lighting = dynamic_pointer_cast<IfcSurfaceStyleLighting>( surf_style_element_select );
 			if( style_lighting )
 			{
 #ifdef _DEBUG
@@ -312,7 +314,7 @@ public:
 				continue;
 			}
 
-			shared_ptr<IfcSurfaceStyleRefraction> style_refraction = dynamic_pointer_cast<IfcSurfaceStyleRefraction>( surf_style_element_select );
+			auto const style_refraction = dynamic_pointer_cast<IfcSurfaceStyleRefraction>( surf_style_element_select );
 			if( style_refraction )
 			{
 #ifdef _DEBUG
@@ -321,7 +323,7 @@ public:
 				continue;
 			}
 
-			shared_ptr<IfcSurfaceStyleWithTextures> style_texture = dynamic_pointer_cast<IfcSurfaceStyleWithTextures>( surf_style_element_select );
+			auto const style_texture = dynamic_pointer_cast<IfcSurfaceStyleWithTextures>( surf_style_element_select );
 			if( style_texture )
 			{
 #ifdef _DEBUG
@@ -335,11 +337,10 @@ public:
 	void convertIfcStyledItem( weak_ptr<IfcStyledItem> styled_item_weak, std::vector<shared_ptr<AppearanceData> >& vec_appearance_data )
 	{
 		if( styled_item_weak.expired() )
-		{
 			return;
-		}
-		shared_ptr<IfcStyledItem> styled_item( styled_item_weak );
-		const int style_id = styled_item->m_entity_id;
+
+		auto const styled_item = styled_item_weak.lock();
+		auto const style_id = styled_item->m_entity_id;
 
 		auto it_find_existing_style = m_map_ifc_styles.find( style_id );
 		if( it_find_existing_style != m_map_ifc_styles.end() )
@@ -348,54 +349,46 @@ public:
 			return;
 		}
 
-		std::vector<shared_ptr<IfcStyleAssignmentSelect> >& vec_style_assigns = styled_item->m_Styles;
-		for( size_t i_style_assign = 0; i_style_assign < vec_style_assigns.size(); ++i_style_assign )
+		auto const& vec_style_assigns = styled_item->m_Styles;
+		for( auto const& style_assign_select : vec_style_assigns )
 		{
 			// TYPE IfcStyleAssignmentSelect = SELECT	(IfcPresentationStyle	,IfcPresentationStyleAssignment);
-			shared_ptr<IfcStyleAssignmentSelect> style_assign_select = vec_style_assigns[i_style_assign];
 			if( !style_assign_select )
-			{
 				continue;
-			}
 
-			shared_ptr<IfcPresentationStyleAssignment> presentation_style_assign = dynamic_pointer_cast<IfcPresentationStyleAssignment>( style_assign_select );
+			auto const presentation_style_assign = dynamic_pointer_cast<IfcPresentationStyleAssignment>( style_assign_select );
 			if( presentation_style_assign )
 			{
-				std::vector<shared_ptr<IfcPresentationStyleSelect> >& vec_styles = presentation_style_assign->m_Styles;
-				for( size_t i_presentation_style = 0; i_presentation_style < vec_styles.size(); ++i_presentation_style )
+				auto const& vec_styles = presentation_style_assign->m_Styles;
+				for( auto const& presentation_style_select : vec_styles )
 				{
 					// TYPE IfcPresentationStyleSelect = SELECT	(IfcCurveStyle	,IfcFillAreaStyle	,IfcNullStyle	,IfcSurfaceStyle	,IfcSymbolStyle	,IfcTextStyle);
-					shared_ptr<IfcPresentationStyleSelect> presentation_style_select = vec_styles[i_presentation_style];
 					shared_ptr<AppearanceData> appearance_data;
-					shared_ptr<IfcCurveStyle> curve_style = dynamic_pointer_cast<IfcCurveStyle>( presentation_style_select );
+					auto const curve_style = dynamic_pointer_cast<IfcCurveStyle>( presentation_style_select );
 					if( curve_style )
 					{
 						convertIfcCurveStyle( curve_style, appearance_data );
 						if( appearance_data )
-						{
 							vec_appearance_data.push_back( appearance_data );
-						}
 						continue;
 					}
 
-					shared_ptr<IfcSurfaceStyle> surface_style = dynamic_pointer_cast<IfcSurfaceStyle>( presentation_style_select );
+					auto const surface_style = dynamic_pointer_cast<IfcSurfaceStyle>( presentation_style_select );
 					if( surface_style )
 					{
 						convertIfcSurfaceStyle( surface_style, appearance_data );
 						if( appearance_data )
-						{
 							vec_appearance_data.push_back( appearance_data );
-						}
 						continue;
 					}
 
-					shared_ptr<IfcTextStyle> text_style = dynamic_pointer_cast<IfcTextStyle>( presentation_style_select );
+					auto const text_style = dynamic_pointer_cast<IfcTextStyle>( presentation_style_select );
 					if( text_style )
 					{
 						if( !appearance_data )
 						{
-							int text_style_id = text_style->m_entity_id;
-							appearance_data = shared_ptr<AppearanceData>( new AppearanceData( text_style_id ) );
+							auto const text_style_id = text_style->m_entity_id;
+							appearance_data = std::make_shared<AppearanceData>( text_style_id );
 						}
 
 						appearance_data->m_text_style = text_style;
@@ -405,7 +398,7 @@ public:
 						continue;
 					}
 
-					shared_ptr<IfcFillAreaStyle> fill_area_style = dynamic_pointer_cast<IfcFillAreaStyle>( presentation_style_select );
+					auto const fill_area_style = dynamic_pointer_cast<IfcFillAreaStyle>( presentation_style_select );
 					if( fill_area_style )
 					{
 #ifdef _DEBUG
@@ -414,7 +407,7 @@ public:
 						continue;
 					}
 
-					shared_ptr<IfcNullStyle> null_style = dynamic_pointer_cast<IfcNullStyle>( presentation_style_select );
+					auto const null_style = dynamic_pointer_cast<IfcNullStyle>( presentation_style_select );
 					if( null_style )
 					{
 #ifdef _DEBUG
@@ -427,7 +420,7 @@ public:
 			}
 
 			// ENTITY IfcPresentationStyle ABSTRACT SUPERTYPE OF(ONEOF(IfcCurveStyle, IfcFillAreaStyle, IfcSurfaceStyle, IfcSymbolStyle, IfcTextStyle));
-			shared_ptr<IfcPresentationStyle> presentation_style = dynamic_pointer_cast<IfcPresentationStyle>( style_assign_select );
+			auto const presentation_style = dynamic_pointer_cast<IfcPresentationStyle>( style_assign_select );
 			if( presentation_style )
 			{
 				shared_ptr<AppearanceData> appearance_data;
@@ -527,14 +520,14 @@ public:
 		}
 
 		// ENTITY IfcPresentationStyle	ABSTRACT SUPERTYPE OF(ONEOF(IfcCurveStyle, IfcFillAreaStyle, IfcSurfaceStyle, IfcSymbolStyle, IfcTextStyle));
-		shared_ptr<IfcCurveStyle> curve_style = dynamic_pointer_cast<IfcCurveStyle>( presentation_style );
+		auto const curve_style = dynamic_pointer_cast<IfcCurveStyle>( presentation_style );
 		if( curve_style )
 		{
 			convertIfcCurveStyle( curve_style, appearance_data );
 			return;
 		}
 
-		shared_ptr<IfcFillAreaStyle> fill_area_style = dynamic_pointer_cast<IfcFillAreaStyle>( presentation_style );
+		auto const fill_area_style = dynamic_pointer_cast<IfcFillAreaStyle>( presentation_style );
 		if( fill_area_style )
 		{
 #ifdef _DEBUG
@@ -543,14 +536,14 @@ public:
 			return;
 		}
 
-		shared_ptr<IfcSurfaceStyle> surface_style = dynamic_pointer_cast<IfcSurfaceStyle>( presentation_style );
+		auto const surface_style = dynamic_pointer_cast<IfcSurfaceStyle>( presentation_style );
 		if( surface_style )
 		{
 			convertIfcSurfaceStyle( surface_style, appearance_data );
 			return;
 		}
 
-		shared_ptr<IfcTextStyle> text_style = dynamic_pointer_cast<IfcTextStyle>( presentation_style );
+		auto const text_style = dynamic_pointer_cast<IfcTextStyle>( presentation_style );
 		if( text_style )
 		{
 			appearance_data->m_text_style = text_style;
@@ -573,9 +566,7 @@ public:
 		{
 			appearance_data = it_find_existing_style->second;
 			if( appearance_data->m_complete )
-			{
 				return;
-			}
 		}
 		else
 		{
@@ -594,7 +585,7 @@ public:
 		//CurveWidth	: OPTIONAL IfcSizeSelect;
 		//CurveColour	: OPTIONAL IfcColour;
 
-		shared_ptr<IfcColour> curve_color = curve_style->m_CurveColour;
+		auto const& curve_color = curve_style->m_CurveColour;
 		if( curve_color )
 		{
 			vec4 color( 0.2, 0.25, 0.3, 1.0 );
