@@ -1056,6 +1056,7 @@ public:
 			simplifyPath( path );
 		}
 	}
+	///\brief Simplifies a path by merging points really close to each other
 	static void simplifyPath( std::vector<vec2>& path )
 	{
 		if( path.size() < 3 )
