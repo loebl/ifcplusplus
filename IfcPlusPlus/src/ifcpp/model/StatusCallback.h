@@ -4,15 +4,22 @@ MIT License
 
 Copyright (c) 2017 Fabian Gerold
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 #pragma once
@@ -41,7 +48,9 @@ public:
 		MESSAGE_TYPE_CLEAR_MESSAGES
 	};
 	/*\class Message
-	  \brief Combines all information about a status message, being it a general message, a warning, error, or a notification about a progress (for example during reading of a file).
+	  \brief Combines all information about a status message, being it a general
+	  message, a warning, error, or a notification about a progress (for example
+	  during reading of a file).
 	*/
 	class Message
 	{
@@ -65,11 +74,8 @@ public:
 		std::wstring m_progress_text;		// A text that describes the current actions. It can be used for example to set a text on the progress bar.
 	};
 
-	StatusCallback()
-	{
-		unsetMessageCallBack();
-	}
-	virtual ~StatusCallback(){}
+	StatusCallback() = default;
+	virtual ~StatusCallback() = default;
 
 	//\brief error callback mechanism to show messages in gui
 	virtual void setMessageCallBack( void* obj_ptr, void (*func)(void*, shared_ptr<Message> t) )
@@ -110,18 +116,22 @@ public:
 					case MESSAGE_TYPE_MINOR_WARNING:
 					case MESSAGE_TYPE_WARNING:
 					case MESSAGE_TYPE_ERROR:
-						std::wcout << L"messageCallback: !m_func_call_on_message. Lost message: " << m->m_message_text.c_str() << std::endl;
+						std::wcout << L"messageCallback: !m_func_call_on_message. Lost message: "
+							<< m->m_message_text.c_str() << std::endl;
 						break;
 					case MESSAGE_TYPE_PROGRESS_VALUE:
-						std::wcout << L"messageCallback: !m_func_call_on_message. Lost progress value: " << m->m_progress_value << std::endl;
+						std::wcout << L"messageCallback: !m_func_call_on_message. Lost progress value: "
+							<< m->m_progress_value << std::endl;
 						break;
 					case MESSAGE_TYPE_PROGRESS_TEXT:
-						std::wcout << L"messageCallback: !m_func_call_on_message. Lost progress text: " << m->m_progress_text.c_str() << std::endl;
+						std::wcout << L"messageCallback: !m_func_call_on_message. Lost progress text: "
+							<< m->m_progress_text.c_str() << std::endl;
 						break;
 				}
 				if( !m_obj_call_on_message )
 				{
-					std::wcout << L"messageCallback: !m_obj_call_on_message. Lost message: " << m->m_message_text.c_str() << std::endl;
+					std::wcout << L"messageCallback: !m_obj_call_on_message. Lost message: "
+						<< m->m_message_text.c_str() << std::endl;
 				}
 			}
 		}
@@ -145,7 +155,8 @@ public:
 		}
 	}
 
-	virtual void messageCallback( const std::string& message_text, MessageType type, const char* reporting_function, BuildingEntity* entity = nullptr )
+	virtual void messageCallback( const std::string& message_text, MessageType type,
+			const char* reporting_function, BuildingEntity* entity = nullptr )
 	{
 		shared_ptr<Message> message( new Message() );
 		message->m_message_text.assign( message_text.begin(), message_text.end() );
@@ -154,7 +165,8 @@ public:
 		message->m_entity = entity;
 		messageCallback( message );
 	}
-	virtual void messageCallback( const std::wstring& message_text, MessageType type, const char* reporting_function, BuildingEntity* entity = nullptr )
+	virtual void messageCallback( const std::wstring& message_text, MessageType type,
+			const char* reporting_function, BuildingEntity* entity = nullptr )
 	{
 		shared_ptr<Message> message( new Message() );
 		message->m_message_text.assign( message_text.c_str() );
@@ -188,10 +200,10 @@ public:
 
 protected:
 	//\brief Pointer to the object on which the message callback function is called.
-	void* m_obj_call_on_message;
+	void* m_obj_call_on_message = nullptr;
 
 	//\brief Pointer to the callback function for messages.
-	void (*m_func_call_on_message)(void*, shared_ptr<Message> t);
+	void (*m_func_call_on_message)(void*, shared_ptr<Message> t) = nullptr;
 
 	StatusCallback* m_redirect_target = nullptr;
 
