@@ -26,6 +26,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OU
 #include "IncludeCarveHeaders.h"
 #include "GeometryInputData.h"
 
+typedef carve::mesh::Edge<3> edge_t;
 typedef carve::mesh::Face<3> face_t;
 typedef carve::mesh::MeshSet<3> meshset_t;
 
@@ -556,16 +557,14 @@ namespace CSG_Adapter
 		checkMeshSetNonNegativeAndClosed( meshset );
 
 		bool already_triagulated = true;
-		for( size_t ii = 0; ii < meshset->meshes.size(); ++ii )
+		for(carve::mesh::Mesh<3> const* mesh : meshset->meshes)
 		{
-			carve::mesh::Mesh<3>* mesh = meshset->meshes[ii];
-			std::vector<face_t* >& vec_faces = mesh->faces;
-			for( size_t i2 = 0; i2 < vec_faces.size(); ++i2 )
+			for(face_t const* face : mesh->faces)
 			{
-				face_t* face = vec_faces[i2];
 				if( face->n_edges != 3 )
 				{
 					already_triagulated = false;
+					break; //no need to search further
 				}
 			}
 		}
@@ -574,114 +573,64 @@ namespace CSG_Adapter
 			return;
 		}
 
-		PolyInputCache3D poly_cache;
-		std::vector<size_t> map_merged_idx;
-		map_merged_idx.resize( meshset->vertex_storage.size(), 0 );
-		for( size_t ii = 0; ii < meshset->meshes.size(); ++ii )
+		carve::input::PolyhedronData new_mesh_data;
+		std::vector<ptrdiff_t> map_index;
+		map_index.reserve(meshset->vertex_storage.size());
+		//copy vertices
+		for (auto const& vertex : meshset->vertex_storage)
 		{
-			carve::mesh::Mesh<3>* mesh = meshset->meshes[ii];
-			std::vector<face_t* >& vec_faces = mesh->faces;
-
-			for( size_t i2 = 0; i2 < vec_faces.size(); ++i2 )
+			new_mesh_data.addVertex(vertex.v);
+		}
+		carve::mesh::Vertex<3> const* const first_vert = &meshset->vertex_storage.front();
+		for(carve::mesh::Mesh<3> const* mesh : meshset->meshes)
+		{
+			for(face_t const* face : mesh->faces)
 			{
-				face_t* face = vec_faces[i2];
-				std::vector<int> face_idx;
-
-				//carve::geom3d::Vector normal = face->plane.N;
+				//gets indices of edge vertices in vertex_storage
+				edge_t* e = face->edge;
+				map_index.clear();
+				do {
+					map_index.push_back(e->vert - first_vert);
+					e = e->next;
+				} while (e != face->edge);
 
 				std::vector<vec2> verts2d;
 				face->getProjectedVertices( verts2d );
-				if( verts2d.size() < 3 )
+				size_t vert2d_size = verts2d.size();
+				if(vert2d_size < 3 )
 				{
 					continue;
 				}
 
-				// check winding order
-				//carve::geom3d::Vector normal_2d = GeomUtils::computePolygon2DNormal( verts2d );
-				//if( normal_2d.z < 0 )
-				//{
-				//      std::reverse( verts2d.begin(), verts2d.end() );
-				//}
-
 				std::vector<carve::triangulate::tri_idx> triangulated;
-				if( verts2d.size() > 3 )
+				try
 				{
-					try
-					{
-						carve::triangulate::triangulate( verts2d, triangulated );
-						carve::triangulate::improve( verts2d, triangulated );
-					}
-					catch( ... )
-					{
+					//order in verts2d is the same as following edges
+					carve::triangulate::triangulate( verts2d, triangulated );
+					carve::triangulate::improve( verts2d, triangulated );
+
+				}
+				catch( ... )
+				{
 #ifdef _DEBUG
-						std::cout << __FUNC__ << " carve::triangulate failed " << std::endl;
+					std::cout << __FUNC__ << " carve::triangulate failed " << std::endl;
 #endif
-						continue;
-					}
-				}
-				else
-				{
-					triangulated.push_back( carve::triangulate::tri_idx( 0, 1, 2 ) );
+					continue;
 				}
 
-				// now insert points to polygon, avoiding points with same coordinates
-				int i_vert = 0;
-				carve::mesh::Edge<3>* edge = face->edge;
-				do
+				//add face definitions
+				for (auto const& tri : triangulated)
 				{
-					const vec3& v = edge->vert->v;
-					edge = edge->next;
-					int vertex_index = poly_cache.addPoint( v );
-					map_merged_idx[i_vert] = vertex_index;
-					++i_vert;
-				} while( edge != face->edge );
-
-				//std::vector<carve::mesh::Vertex<3>* > verts;
-				//face->getVertices( verts );
+					new_mesh_data.addFace(map_index[tri.a], map_index[tri.b], map_index[tri.c]);
+				}
 
 				// TODO: merge coplanar faces and re-triangulate
 
-				for( size_t i = 0; i != triangulated.size(); ++i )
-				{
-					const carve::triangulate::tri_idx& triangle = triangulated[i];
-					int a = triangle.a;
-					int b = triangle.b;
-					int c = triangle.c;
-
-					int vertex_id_a = map_merged_idx[a];
-					int vertex_id_b = map_merged_idx[b];
-					int vertex_id_c = map_merged_idx[c];
-
-					if( vertex_id_a == vertex_id_b || vertex_id_a == vertex_id_c || vertex_id_b == vertex_id_c )
-					{
-						continue;
-					}
-
-#ifdef _DEBUG
-					const carve::poly::Vertex<3>& v_a = poly_cache.m_poly_data->getVertex( vertex_id_a );
-					const carve::poly::Vertex<3>& v_b = poly_cache.m_poly_data->getVertex( vertex_id_b );
-
-					double dx = v_a.v[0] - v_b.v[0];
-					if( std::abs( dx ) < 0.0000001 )
-					{
-						double dy = v_a.v[1] - v_b.v[1];
-						if( std::abs( dy ) < 0.0000001 )
-						{
-							double dz = v_a.v[2] - v_b.v[2];
-							if( std::abs( dz ) < 0.0000001 )
-							{
-								std::cerr << "abs(dx) < 0.00001 && abs(dy) < 0.00001 && abs(dz) < 0.00001\n";
-							}
-						}
-					}
-#endif
-					poly_cache.m_poly_data->addFace( vertex_id_a, vertex_id_b, vertex_id_c );
-				}
 			}
 		}
 
 		meshset.reset();
-		meshset = shared_ptr<meshset_t >( poly_cache.m_poly_data->createMesh( carve::input::opts() ) );
+		meshset = shared_ptr<meshset_t >(new_mesh_data.createMesh(carve::input::opts()));
 	}
 	inline void simplifyMesh( shared_ptr<meshset_t >& meshset, bool triangulate, StatusCallback* report_callback, BuildingEntity* entity )
 	{
