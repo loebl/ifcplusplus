@@ -88,7 +88,7 @@ protected:
 	bool copyVertices(shared_ptr<IfcCartesianPointList3D> const point_list,
 			shared_ptr<carve::input::PolyhedronData> carve_mesh_builder)
 	{
-		double length_factor = m_unit_converter->getLengthInMeterFactor();
+		auto const length_factor = m_unit_converter->getLengthInMeterFactor();
 		for(auto const& coord : point_list->m_CoordList)
 		{
 			if(coord.size() != 3)
